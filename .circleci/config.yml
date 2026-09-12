@@ -1,0 +1,41 @@
+# M6-EXI-01 preparation. A normal push never runs the proof job.
+# The workflow requires an explicitly supplied run_proof=true parameter AND
+# proof-project main. The job also requires a separately approved proof SHA.
+version: 2.1
+
+parameters:
+  run_proof:
+    type: boolean
+    default: false
+
+jobs:
+  m6-exact-candidate-proof:
+    machine:
+      image: ubuntu-2404:2026.05.1
+    resource_class: large.gen2
+    working_directory: ~/project
+    environment:
+      EXPECTED_PROOF_REPOSITORY: Pacchifans69/linguagraph-m6-proof
+      EXPECTED_PROOF_BRANCH: main
+      EXPECTED_CANDIDATE_REPOSITORY: Pacchifans69/LinguaGraph
+      EXPECTED_CANDIDATE_BRANCH: m6-mode-oriented-workbench-information-architecture
+      EXPECTED_CANDIDATE_SHA: 40f7fc98bed0a0261ef67451077b04dbbd1281b3
+      EXPECTED_CANDIDATE_TREE: 32e2a5cd0d7e84c6eaf4e9400568026ae2fdbe3e
+      EXPECTED_CANDIDATE_PARENT: c9ce3732e546900a068b1e8b4cbb0764e311ed4b
+      EXPECTED_FROZEN_MAIN: cb61725fe9f05c704a6f80b67c6343f49ade9234
+      EXPECTED_ALEMBIC_HEAD: '0006'
+    steps:
+      - checkout
+      - run:
+          name: M6 exact-candidate verification
+          command: bash scripts/run-m6-proof.sh
+          no_output_timeout: 30m
+      - store_artifacts:
+          path: proof-artifacts
+          destination: m6-exi-01
+
+workflows:
+  m6-proof:
+    when: pipeline.parameters.run_proof and pipeline.git.branch == "main"
+    jobs:
+      - m6-exact-candidate-proof
