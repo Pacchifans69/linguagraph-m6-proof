@@ -1,8 +1,8 @@
 # LinguaGraph M6 external proof preparation
 
 This independent repository contains proof infrastructure only. It is scoped to
-M6-EXI-01 and the exact LinguaGraph candidate SHA/tree in `.circleci/config.yml`.
-It does not alter the LinguaGraph repository.
+M6-EXI-01 / M6-EXI-02 and the exact LinguaGraph candidate SHA/tree in
+`.circleci/config.yml`. It does not alter the LinguaGraph repository.
 
 ## Candidate binding (current)
 
@@ -27,27 +27,29 @@ anywhere in this repository.
 
 ## Authorization state
 
-**HOLD — R1 execution is NOT authorized.** `run_proof` defaults to `false`, and
+**HOLD — R2 execution is NOT authorized.** `run_proof` defaults to `false`, and
 the workflow selects only proof `main` when the parameter is explicitly `true`.
 
-Both run identifiers are consumed and must never be reused:
+All three run identifiers are consumed and must never be reused:
 
 ```text
 M6-EXI-01-RUN-U:            SPENT / MUST NOT REUSE
 M6-EXI-01-RUN-R0-4FB193A:   SPENT / MUST NOT REUSE
+M6-EXI-01-RUN-R1-848E19C:   SPENT / MUST NOT REUSE
 ```
 
-The project-level guard variables were retired after R0:
+After the M6-EXI-02 guard retirement the project-level guard variables are
+absent again:
 
 ```text
-APPROVED_PROOF_SHA:          ABSENT at project level after retirement
-M6_PROOF_RUN_AUTHORIZATION:  ABSENT at project level after retirement
+APPROVED_PROOF_SHA:          ABSENT
+M6_PROOF_RUN_AUTHORIZATION:  ABSENT
 ```
 
-Any future R1 execution requires BOTH:
+Any future R2 execution requires BOTH:
 
 1. a new, Human-reviewed proof SHA, and
-2. a fresh, distinct, one-shot Human run authorization.
+2. a new, distinct, one-shot Human run authorization.
 
 Before a separately approved execution, CircleCI's project configuration must
 provide `APPROVED_PROOF_SHA` set to the exact Human-reviewed proof commit and
@@ -58,8 +60,8 @@ in the project repository.
 
 ## Hosted attempt history (factual)
 
-Two hosted attempts have been made against this proof setup. Both were rejected
-by the scheduler **before any repository-defined step ran**.
+Three hosted attempts have been made against this proof setup. Every one of them
+was rejected by the scheduler **before any repository-defined step ran**.
 
 Pipeline #2 — proof SHA `d668429b6411170fdd1becbc838cf8e31d51f390`:
 
@@ -90,43 +92,104 @@ R0 terminal facts:
 - no proof artifacts existed (the job artifact endpoint returned 404);
 - **semantic hosted proof was not obtained**.
 
-Pipeline #2 and pipeline #3 produced the same pre-step
-`invalid-resource-class` rejection. That is recorded strictly as **reproduced
-scheduler/pre-step behavior**. The root cause remains **undetermined**, and this
-must not be described as proven to be a CircleCI bug, a Free-plan entitlement
-issue, a resource-class entitlement issue, an image-registry bug, or a backend
-defect.
+R1 / pipeline #4 — proof SHA `848e19cc83eae4e7a347b4a8abf8a5dff502b679`;
+executor tuple `ubuntu-2404:2025.09.1` + `large.gen2`:
+
+```text
+pipeline #:     4
+pipeline UUID:  52d593c8-6b8d-496c-a43f-a0a8b2368c2c
+workflow UUID:  541fa976-85e9-48c8-b188-a280cc89ceb8
+job #:          3
+job UUID:       c1e984ea-d1df-411d-9738-4e8980a892af
+rejection:      invalid-resource-class
+message:        Job was rejected because resource class large.gen2,
+                image ubuntu-2404:2025.09.1 is not a valid resource class
+```
+
+R1 terminal facts: the executor did not start (`start_time = null`); the
+repository-defined checkout did not run; `scripts/run-m6-proof.sh` did not run;
+no proof artifacts existed (the job artifact endpoint returned 404);
+**semantic hosted proof was absent**.
+
+## Interpretation discipline
+
+R0 and R1 reproduced the same pre-step `invalid-resource-class` class of failure
+while changing only the Ubuntu 24.04 image tag. This materially weakens the
+hypothesis that the blocker is unique to `ubuntu-2404:2026.05.1`.
+
+The root cause remains **UNDETERMINED**. Nothing here is proven to be a CircleCI
+bug, an account defect, a Free-plan defect, a `large.gen2` entitlement defect, a
+scheduler routing bug, an image-registry defect, or a backend defect. Those
+remain hypotheses only.
 
 For project setup, leave all VCS push, PR, schedule, and custom webhook
 triggers disabled at the CircleCI project level. A skipped workflow is not a
 substitute for verifying project-level triggers are disabled. Human must review
 the exact proof commit/tree first.
 
-## R1 hypothesis and single-variable change
+## M6-EXI-02 — Human-approved M6-specific External Infrastructure Exception
 
-R1 preparation is a **single-variable diagnostic preparation**. The only change
-relative to R0 is the CircleCI machine image tag:
+`M6-EXI-02` is a **new M6-specific External Infrastructure Exception**. Its sole
+purpose is to attempt a **controlled CircleCI Gen3 hosted-proof path** in
+response to the pre-step `invalid-resource-class` blocker already reproduced by
+R0 and R1, staying inside the same CircleCI provider.
 
-```text
-machine image:  ubuntu-2404:2026.05.1
-                ->  ubuntu-2404:2025.09.1
-```
-
-Everything else is deliberately held constant so that a future R1 result can be
-read as a one-variable comparison:
+The exception **does NOT waive** any Gate 2 requirement, including:
 
 ```text
-resource class:       large.gen2 (unchanged)
-product pins:         unchanged
-runtime pins:         unchanged
-test surface:         unchanged
-workflow semantics:   unchanged
-proof script:         byte-identical to R0
+exact candidate / tree / base provenance
+clean hosted Linux execution
+Python 3.13
+Node 24
+PostgreSQL 18
+frozen dependency installation
+Alembic integrity
+587 backend tests / zero skips
+lint
+typecheck
+502 Vitest
+production build
+26 Playwright paths / zero skipped / flaky / failed
+cleanup
+dependency hash equality
+tracked-tree integrity
+artifact integrity and independent artifact review
 ```
 
-This repository change does not trigger, request or authorize any run. CircleCI
-image availability is not verified by running a pipeline here; that belongs to
-a separately authorized R1 execution.
+## R2 hypothesis and single-variable change
+
+R2 preparation is a **single-variable resource-generation experiment**:
+
+```text
+R1 (observed):   image = ubuntu-2404:2025.09.1   resource = large.gen2
+R2 (prepared):   image = ubuntu-2404:2025.09.1   resource = large.gen3
+```
+
+The only intended execution-semantic variable is the resource generation,
+Gen2 -> Gen3. The CPU/RAM envelope is intended to remain the same:
+
+```text
+4 vCPU
+16 GiB
+```
+
+Public CircleCI documentation currently classifies `large.gen3` as a Cloud
+resource class with 4 vCPU / 16 GiB and marks Gen3 as **Open Beta**.
+
+> Public CircleCI documentation lists `large.gen3` as a Cloud Gen3 resource
+> class. This documentation-level availability does not prove that this
+> specific project can provision it; R2 has not run.
+
+Everything else is deliberately held constant: the machine image
+(`ubuntu-2404:2025.09.1`), all product pins, all runtime pins, the test surface,
+the workflow semantics, and `scripts/run-m6-proof.sh` (byte-identical to R1).
+
+This proof does not enable `docker_layer_caching`, so no configuration or script
+change is made in response to any Gen3 DLC known issue.
+
+This repository change does not trigger, request or authorize any run.
+Availability is not verified by running a pipeline here; that belongs to a
+separately authorized R2 execution.
 
 ## What the proof verifies
 
@@ -152,9 +215,9 @@ for this exact candidate's hosted execution.
 
 Before a separate run authorization, independently confirm the **actual**
 project configuration instead of treating a documentation-level default as
-fact: the Free-plan credit balance, `large.gen2` entitlement, exact availability
-of the pinned image (`ubuntu-2404:2025.09.1` for R1), and effective artifact
-retention for this existing CircleCI project. Capture the observed values in
-the Human review record. The project exists and pipelines #2 and #3 are on
-record, but its effective settings, entitlements, image availability and
-retention still must be observed and recorded before any run authorization.
+fact: the credit balance, `large.gen3` provisioning entitlement for this
+project, exact availability of the pinned image (`ubuntu-2404:2025.09.1`), and
+effective artifact retention. Capture the observed values in the Human review
+record. The project exists and pipelines #2, #3 and #4 are on record, but its
+effective settings, entitlements, image availability and retention still must
+be observed and recorded before any run authorization.
