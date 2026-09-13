@@ -11,7 +11,7 @@ parameters:
 jobs:
   m6-exact-candidate-proof:
     machine:
-      image: ubuntu-2404:2026.05.1
+      image: ubuntu-2404:2025.09.1
     resource_class: large.gen2
     working_directory: ~/project
     environment:
