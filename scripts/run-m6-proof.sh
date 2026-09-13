@@ -7,9 +7,9 @@ readonly PROOF_ROOT="$(git rev-parse --show-toplevel)"
 readonly EVIDENCE="$PROOF_ROOT/proof-artifacts"
 readonly CANDIDATE="$PROOF_ROOT/candidate"
 readonly APP_BRANCH='m6-mode-oriented-workbench-information-architecture'
-readonly APP_SHA='40f7fc98bed0a0261ef67451077b04dbbd1281b3'
-readonly APP_TREE='32e2a5cd0d7e84c6eaf4e9400568026ae2fdbe3e'
-readonly APP_PARENT='c9ce3732e546900a068b1e8b4cbb0764e311ed4b'
+readonly APP_SHA='2054c844ea3488b43459903f64f063b1d541f8a2'
+readonly APP_TREE='efd303a2aaf4f32dec14346ac4c644a8717a0ffa'
+readonly APP_PARENT='f2a9ef458b234d826e22d55a6a4740b3b0e7a0ec'
 readonly MAIN_SHA='cb61725fe9f05c704a6f80b67c6343f49ade9234'
 readonly APP_URL='https://github.com/Pacchifans69/LinguaGraph.git'
 readonly POSTGRES_CONTAINER='linguagraph-m6-exi01-postgres'
@@ -176,7 +176,7 @@ frontend() {
   npm run lint
   npm run typecheck
   npm run test 2>&1 | tee "$EVIDENCE/vitest-raw.log"
-  grep -Eq '495 passed' "$EVIDENCE/vitest-raw.log" || die 'Expected 495 passed Vitest summary'
+  grep -Eq '502 passed' "$EVIDENCE/vitest-raw.log" || die 'Expected 502 passed Vitest summary'
   ! grep -Eiq 'Tests.*(skipped|todo|failed)' "$EVIDENCE/vitest-raw.log" || die 'Vitest incomplete'
   npm run build
 }
