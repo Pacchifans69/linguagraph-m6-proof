@@ -60,19 +60,164 @@ by this repair.
 
 ## Authorization state
 
-**M6-EXI-03 hosted execution is NOT authorized by this repair.**
+M6-EXI-03 hosted execution has now **actually been invoked exactly once**, under
+a separate Human one-shot authorization, and that invocation **FAILED** in the
+proof harness itself. The former "EXI-03 hosted execution is NOT authorized"
+wording described the state before Run #1 and is superseded by the historical
+record below; it is **not** a statement that EXI-03 was never executed.
 
 ```text
-EXI-03 hosted execution:        NOT AUTHORIZED
+M6-EXI-03 Run #1 (historical):  EXECUTED / FAIL
+Run #1 failure evidence:        RETAINED LOCALLY / INDEPENDENTLY VERIFIED
+Run #1 authorization token:     SPENT / MUST NOT REUSE
+
+current future execution
+authorization:                  NONE
+
 semantic hosted proof:          ABSENT
 G2-X01:                         OPEN / EXTERNAL
 Gate 2:                         NOT PASS
 PR / merge:                     NOT AUTHORIZED
 ```
 
-Writing the EXI-03 adapter does not run it, does not reserve an execution slot,
-and does not produce proof. No semantic hosted proof exists until a separately
-authorized run completes and its artifacts are independently verified.
+A new EXI-03 rerun requires **all three** of:
+
+```text
+a new Human-reviewed proof SHA
+AND
+a fresh distinct one-shot EXI-03 authorization
+AND
+a restored clean-host baseline
+```
+
+Writing or repairing the EXI-03 adapter does not run it, does not reserve an
+execution slot, and does not produce proof. No semantic hosted proof exists
+until a separately authorized run completes **and** its failure-or-success
+artifacts are independently verified.
+
+## M6-EXI-03 Run #1 — executed / FAIL (historical record)
+
+Deterministic, durable record of the single EXI-03 hosted invocation performed
+so far. It is recorded here as **fact**, not as semantic proof.
+
+### Run identity
+
+```text
+M6-EXI-03 Run #1:        EXECUTED / FAIL
+
+approved proof SHA:      6c51170a393c4c06b2dbaf54fd28e68539534d58
+approved proof tree:     fe28d04817fc20f31d1f7124188451f99efb91d3
+
+Product candidate:       2054c844ea3488b43459903f64f063b1d541f8a2
+Product candidate tree:  efd303a2aaf4f32dec14346ac4c644a8717a0ffa
+frozen main:             cb61725fe9f05c704a6f80b67c6343f49ade9234
+```
+
+### Stage facts
+
+```text
+guard_core        PASS
+guard_remote      PASS
+fetch_candidate   PASS
+deps_pre          PASS
+install_runtimes  FAIL
+```
+
+The failure occurred at the pinned-uv-version check inside
+`install_runtimes`:
+
+```text
+expected:  uv 0.12.10
+observed:  uv 0.12.10 (x86_64-unknown-linux-gnu)
+```
+
+### Failure classification
+
+```text
+failure class:  PROOF-HARNESS CORRECTNESS DEFECT
+
+not:            Product semantic failure
+not:            ECS/provider identity failure
+```
+
+The host reported the correct uv semantic version `0.12.10`; the harness guard
+wrongly required byte equality with the full human-display string. The guard was
+the defect, not the Product and not the provider.
+
+### Not reached
+
+```text
+backend pytest:            NOT REACHED
+frontend / Vitest:         NOT REACHED
+Playwright:                NOT REACHED
+
+semantic hosted proof:     ABSENT
+G2-X01:                    OPEN / EXTERNAL
+Gate 2:                    NOT PASS
+PR / merge:                NOT AUTHORIZED
+```
+
+### Runtime / bootstrap observations from Run #1
+
+Recorded as **bootstrap observations only**. None of the following is a
+semantic proof PASS:
+
+```text
+Docker bootstrap completed before failure
+uv 0.12.10 installed
+Python 3.13.15 installed
+Node 24.17.0 installed
+PostgreSQL 18 image pulled / proof-owned container created
+cleanup=0
+```
+
+### Authorization provenance
+
+```text
+M6-EXI-03-RUN-6c51170a-6EF25A7993542351
+```
+
+```text
+status: SPENT / MUST NOT REUSE
+```
+
+This identifier is recorded because it is a Human-visible **historical
+authorization identifier**, not a secret, and it is not a credential. It is
+spent, it must never be reused as a credential or token, and it must never be
+presented again as an authorization for any future run. It is deliberately not
+written into any machine evidence artifact; the adapter records only the
+authorization token's SHA-256, never the raw token.
+
+### Retained failure evidence
+
+```text
+Run #1 failure artifacts:  RETAINED LOCALLY / INDEPENDENTLY VERIFIED
+```
+
+Deterministic Run #1 archive:
+
+```text
+m6-proof-artifacts-6c51170a393c4c06b2dbaf54fd28e68539534d58.tar.gz
+```
+
+```text
+archive SHA-256:                      4640be6a092bc67a72099d0dcaf8af7b404b314fd220352966bf07b6fb90ab21
+internal artifact-manifest.sha256:    2abc3d208b4258b3a5f60b54337e35d1e481c4835be89747e7c33f47c7209d36
+```
+
+The Human independently downloaded and reconstructed the exact archive and
+verified:
+
+```text
+archive SHA-256:            MATCH
+artifact-manifest SHA-256:  MATCH
+every manifest entry:       MATCH
+final:                      ALL ARTIFACTS VERIFIED
+```
+
+This independent verification establishes **failure-evidence integrity only**.
+It does **not** establish, and must not be read as, any semantic proof result,
+any Product verdict, or any Gate 2 outcome.
 
 ## M6-EXI-01 / M6-EXI-02 — CircleCI historical / pre-step path
 
@@ -296,7 +441,7 @@ host bootstrap.
 
 ## Future EXI-03 run requirements
 
-A future EXI-03 run requires **both**:
+A future EXI-03 run requires **all three** of:
 
 1. `APPROVED_PROOF_SHA` set to the exact full 40-character proof commit that a
    Human has reviewed; and
@@ -306,14 +451,42 @@ A future EXI-03 run requires **both**:
    M6-EXI-03-RUN-<approved-proof-sha-prefix>-<nonce>
    ```
 
+3. a restored clean-host baseline (see below).
+
 The authorization prefix must match the leading characters of
 `APPROVED_PROOF_SHA`. Do not embed an actual Human authorization token, API
-token, or password in this repository.
+token, or password in this repository. The Run #1 authorization
+`M6-EXI-03-RUN-6c51170a-6EF25A7993542351` is spent and cannot satisfy this
+requirement.
 
-The repaired proof SHA created by the M6-EXI-03 harness repair is **not** yet
-Human-reviewed. It requires separate Human review before any EXI-03 run
-authorization. The adapter deliberately does not hardcode the not-yet-known
-repaired proof SHA.
+The Run #1 proof SHA `6c51170a393c4c06b2dbaf54fd28e68539534d58` (tree
+`fe28d04817fc20f31d1f7124188451f99efb91d3`) is the SHA that Run #1 executed and
+that this bounded correction repairs. It is **not** automatically approved for a
+rerun: any future EXI-03 execution requires a new Human-reviewed proof SHA, and
+this correction does not constitute that review. The adapter deliberately does
+not hardcode the not-yet-known future proof SHA.
+
+### Clean-host baseline requirement
+
+Run #1 modified the ECS system disk through the approved bootstrap: Docker
+bootstrap, installed uv / Python / Node runtimes, and a pulled PostgreSQL 18
+image with a proof-owned container. That disk state is **not** the original
+clean-host baseline measured earlier in this README.
+
+```text
+A future formal rerun must not treat the post-Run-#1 disk state as the original
+clean-host baseline.
+
+Restoration / reinitialization of a clean baseline is a separate
+Human/provider operation and is NOT authorized by this correction.
+```
+
+This repository makes **no** claim that any provider action has occurred. In
+particular, this correction does **not** assert that the system disk has been
+reinitialized, that the instance has been stopped, that an image has been
+reinstalled, or that any other provider-side state change has taken place. No
+such operation is performed or verified here; the clean-host baseline remains
+**NOT RESTORED / unverified**.
 
 ### Run token spent semantics
 

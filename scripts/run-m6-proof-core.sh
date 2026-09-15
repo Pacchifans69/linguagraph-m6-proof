@@ -204,7 +204,19 @@ install_runtimes() {
   done
   docker_run exec "$POSTGRES_CONTAINER" pg_isready -q -U postgres || die 'PostgreSQL not ready'
   [[ "$(docker_run exec "$POSTGRES_CONTAINER" psql -At -U postgres -d postgres -c 'SHOW server_version_num')" == 18* ]] || die 'PostgreSQL is not major 18'
-  expect "$(uv --version)" 'uv 0.12.10' pinned_uv_version
+  # `uv --version` prints a human-display string such as
+  # "uv 0.12.10 (x86_64-unknown-linux-gnu)". The frozen semantic requirement is
+  # that the uv *semantic version token* is exactly 0.12.10, so the platform
+  # suffix is accepted while any other version (including pre-release tokens
+  # such as 0.12.10rc1) still fails closed.
+  local uv_version_output uv_version
+  uv_version_output=$(uv --version)
+  if [[ "$uv_version_output" =~ ^uv[[:space:]]+([^[:space:]]+) ]]; then
+    uv_version="${BASH_REMATCH[1]}"
+  else
+    die "Unable to parse uv version output: $uv_version_output"
+  fi
+  expect "$uv_version" '0.12.10' pinned_uv_version
   expect "$(node --version)" 'v24.17.0' pinned_node_version
   { uname -a; cat /etc/os-release; nproc; grep MemTotal /proc/meminfo; uv --version; uv python find 3.13; node --version; npm --version; printf 'docker_mode=%s\n' "$DOCKER_MODE"; docker_run image inspect postgres:18 --format '{{json .RepoDigests}}'; docker_run exec "$POSTGRES_CONTAINER" psql -At -U postgres -d postgres -c 'SELECT version()'; } > "$EVIDENCE/runtime.txt"
 }
