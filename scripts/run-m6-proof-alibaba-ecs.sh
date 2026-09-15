@@ -21,8 +21,18 @@ set -Eeuo pipefail
 
 readonly PROOF_ROOT="$(git rev-parse --show-toplevel)"
 readonly CORE="$PROOF_ROOT/scripts/run-m6-proof-core.sh"
-readonly EVIDENCE="${M6_PROOF_EVIDENCE_DIR:-$PROOF_ROOT/proof-artifacts}"
+
+# F5: the formal EXI-03 evidence path is fixed. An inherited
+# M6_PROOF_EVIDENCE_DIR may only repeat that exact path; anything else fails
+# closed so evidence cannot be redirected elsewhere.
+readonly INHERITED_EVIDENCE_DIR="${M6_PROOF_EVIDENCE_DIR:-}"
+readonly FIXED_EVIDENCE="$PROOF_ROOT/proof-artifacts"
+readonly EVIDENCE="$FIXED_EVIDENCE"
 export M6_PROOF_EVIDENCE_DIR="$EVIDENCE"
+
+# F4: canonical proof-repository origin. A shared commit SHA alone is not proof
+# repository identity.
+readonly PROOF_ORIGIN_URL='https://github.com/Pacchifans69/linguagraph-m6-proof.git'
 
 # Host-persistent, untracked state lives outside the git worktree.
 readonly HOST_STATE="${M6_PROOF_HOST_STATE:-$HOME/.local/state/linguagraph-m6-proof}"
@@ -51,31 +61,77 @@ die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 expect() { [[ "$1" == "$2" ]] || die "Mismatch: $3 (expected $2; got $1)"; }
 record() { printf '%s=%s\n' "$1" "$2" >> "$EVIDENCE/provenance.txt"; }
 
-# Preserve artifacts on both PASS and FAIL, then preserve the proof exit status.
+# Write artifact-manifest.sha256 so it corresponds to the current contents of
+# proof-artifacts/, excluding the manifest itself. Built through a temp file so
+# a failed run never leaves a truncated/partial manifest in place.
+write_manifest() {
+  local tmp="$EVIDENCE/.artifact-manifest.sha256.tmp"
+  rm -f "$tmp"
+  if ( cd "$EVIDENCE" && find . -type f \
+         ! -name artifact-manifest.sha256 \
+         ! -name .artifact-manifest.sha256.tmp \
+         -print0 | sort -z | xargs -0 -r sha256sum ) > "$tmp"; then
+    mv -f "$tmp" "$EVIDENCE/artifact-manifest.sha256"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+# Deterministic archive of proof-artifacts plus its external SHA-256.
+build_archive() {
+  local archive_name=$1 archive=$2
+  if tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+       -C "$PROOF_ROOT" -cf - proof-artifacts | gzip -n > "$archive"; then
+    ( cd "$ARCHIVE_DIR" && sha256sum "$archive_name" > "$archive_name.sha256" )
+  else
+    rm -f "$archive" "$ARCHIVE_DIR/$archive_name.sha256"
+    return 1
+  fi
+}
+
+# Preserve artifacts on both PASS and FAIL. Evidence/packaging failure is a
+# formal run failure: the adapter exit stays nonzero AND outcome.txt says FAIL
+# AND the manifest is regenerated to match the final contents.
 finalize() {
-  local exit_code=$? archive_name='' archive=''
+  local exit_code=$? packaging_failed=0 archive_name='' archive='' first_line=''
   trap - EXIT
-  mkdir -p "$EVIDENCE"
+  mkdir -p "$EVIDENCE" 2>/dev/null || true
+
   if [[ ! -e "$EVIDENCE/outcome.txt" ]]; then
-    printf 'FAIL adapter_exit=%s\n' "$exit_code" > "$EVIDENCE/outcome.txt"
-  fi
-  if ! ( cd "$EVIDENCE" && find . -type f ! -name artifact-manifest.sha256 -print0 | sort -z | xargs -0 -r sha256sum > artifact-manifest.sha256 ); then
-    printf 'FAIL: artifact manifest could not be written\n' >&2
-    exit_code=1
-  fi
-  mkdir -p "$ARCHIVE_DIR" || exit_code=1
-  if [[ -d "$ARCHIVE_DIR" ]]; then
-    archive_name="m6-proof-artifacts-${APPROVED_PROOF_SHA:-unknown}.tar.gz"
-    archive="$ARCHIVE_DIR/$archive_name"
-    if tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-         -C "$PROOF_ROOT" -cf - proof-artifacts | gzip -n > "$archive"; then
-      ( cd "$ARCHIVE_DIR" && sha256sum "$archive_name" > "$archive_name.sha256" ) || exit_code=1
-    else
-      printf 'FAIL: deterministic artifact archive failed\n' >&2
-      rm -f "$archive"
+    printf 'FAIL missing_outcome adapter_exit=%s\n' "$exit_code" > "$EVIDENCE/outcome.txt"
+    if (( exit_code == 0 )); then exit_code=1; fi
+  else
+    first_line=$(head -n1 "$EVIDENCE/outcome.txt" 2>/dev/null || printf '')
+    if [[ "$first_line" == 'PASS' && "$exit_code" != 0 ]]; then
+      # Never leave a PASS outcome on a failed process exit.
+      printf 'FAIL adapter_exit=%s\n' "$exit_code" > "$EVIDENCE/outcome.txt"
+    elif [[ "$first_line" != 'PASS' && "$exit_code" == 0 ]]; then
+      # A non-PASS outcome with a zero exit is incoherent; fail closed.
       exit_code=1
     fi
   fi
+
+  write_manifest || packaging_failed=1
+
+  mkdir -p "$ARCHIVE_DIR" 2>/dev/null || packaging_failed=1
+  if [[ -d "$ARCHIVE_DIR" ]]; then
+    archive_name="m6-proof-artifacts-${APPROVED_PROOF_SHA:-unknown}.tar.gz"
+    archive="$ARCHIVE_DIR/$archive_name"
+    build_archive "$archive_name" "$archive" || packaging_failed=1
+  fi
+
+  if (( packaging_failed != 0 )); then
+    printf 'FAIL packaging_failed=1 adapter_exit=%s\n' "$exit_code" > "$EVIDENCE/outcome.txt"
+    exit_code=1
+    # Regenerate the manifest for the final FAIL outcome, then best-effort
+    # rebuild a coherent failure archive. Rebuild success never clears failure.
+    write_manifest || true
+    if [[ -d "$ARCHIVE_DIR" && -n "$archive_name" ]]; then
+      build_archive "$archive_name" "$archive" || true
+    fi
+  fi
+
   exit "$exit_code"
 }
 trap finalize EXIT
@@ -92,10 +148,20 @@ guard_no_circleci() {
 }
 
 # ---------------------------------------------------------------------------
-# 2. Proof SHA guard (before any evidence creation).
+# 2. Evidence path guard (F5): evidence may not be redirected.
+# ---------------------------------------------------------------------------
+guard_evidence_path() {
+  if [[ -n "$INHERITED_EVIDENCE_DIR" && "$INHERITED_EVIDENCE_DIR" != "$FIXED_EVIDENCE" ]]; then
+    die "M6_PROOF_EVIDENCE_DIR must be unset or exactly $FIXED_EVIDENCE; refusing redirected evidence"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# 3. Proof SHA guard (before any evidence creation).
 # ---------------------------------------------------------------------------
 guard_proof_sha() {
   [[ "${APPROVED_PROOF_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || die 'APPROVED_PROOF_SHA must be a full 40-character SHA'
+  expect "$(git -C "$PROOF_ROOT" remote get-url origin 2>/dev/null || printf '')" "$PROOF_ORIGIN_URL" proof_origin_url
   expect "$(git -C "$PROOF_ROOT" rev-parse --abbrev-ref HEAD)" 'main' proof_branch
   expect "$(git -C "$PROOF_ROOT" rev-parse HEAD)" "$APPROVED_PROOF_SHA" approved_proof_head
   expect "$(git -C "$PROOF_ROOT" ls-remote origin refs/heads/main | awk '{print $1}')" "$APPROVED_PROOF_SHA" approved_proof_remote_main
@@ -103,7 +169,7 @@ guard_proof_sha() {
 }
 
 # ---------------------------------------------------------------------------
-# 3. One-shot EXI-03 run authorization. The raw token is never recorded; only
+# 4. One-shot EXI-03 run authorization. The raw token is never recorded; only
 #    its SHA-256 is recorded. A reused token fails closed.
 # ---------------------------------------------------------------------------
 guard_run_authorization() {
@@ -131,7 +197,7 @@ guard_run_authorization() {
 }
 
 # ---------------------------------------------------------------------------
-# 4. Exact Alibaba ECS provenance guard and evidence capture.
+# 5. Exact Alibaba ECS provenance guard and evidence capture.
 # ---------------------------------------------------------------------------
 imds_plain() { curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "$IMDS_BASE/$1"; }
 imds_request_token() {
@@ -154,6 +220,7 @@ capture_imds() {
 
 guard_and_capture_imds() {
   local code instance_id region zone itype image mac
+  local identity_document='' identity_pkcs7='' boot_epoch='' boot_utc=''
   code=$(imds_plain meta-data/instance-id)
   expect "$code" '403' imds_tokenless_instance_id_http_status
   IMDS_TOKEN=$(imds_request_token) || die 'Alibaba IMDS token mode request failed'
@@ -193,12 +260,15 @@ guard_and_capture_imds() {
     printf 'unavailable\n' > "$EVIDENCE/primary-eni.txt"
     printf 'unavailable\n' > "$EVIDENCE/primary-eni-private-ipv4.txt"
   fi
-  if ! imds_get dynamic/instance-identity/document > "$EVIDENCE/instance-identity-document.json" 2>/dev/null; then
-    printf 'unavailable\n' > "$EVIDENCE/instance-identity-document.json"
-  fi
-  if ! imds_get dynamic/instance-identity/pkcs7 > "$EVIDENCE/instance-identity-pkcs7.txt" 2>/dev/null; then
-    printf 'unavailable\n' > "$EVIDENCE/instance-identity-pkcs7.txt"
-  fi
+  # F3: signed instance identity is mandatory provenance and fails closed. The
+  # artifact files and their SHA-256 are written only after a real, non-empty
+  # object is retrieved; a literal "unavailable" is never hashed.
+  identity_document=$(imds_get dynamic/instance-identity/document) || die 'Alibaba instance identity document request failed'
+  [[ -n "$identity_document" ]] || die 'Alibaba instance identity document is empty'
+  printf '%s\n' "$identity_document" > "$EVIDENCE/instance-identity-document.json"
+  identity_pkcs7=$(imds_get dynamic/instance-identity/pkcs7) || die 'Alibaba instance identity PKCS7 request failed'
+  [[ -n "$identity_pkcs7" ]] || die 'Alibaba instance identity PKCS7 response is empty'
+  printf '%s\n' "$identity_pkcs7" > "$EVIDENCE/instance-identity-pkcs7.txt"
   sha256sum "$EVIDENCE/instance-identity-document.json" | cut -d' ' -f1 > "$EVIDENCE/instance-identity-document.sha256"
   sha256sum "$EVIDENCE/instance-identity-pkcs7.txt" | cut -d' ' -f1 > "$EVIDENCE/instance-identity-pkcs7.sha256"
 
@@ -211,7 +281,14 @@ guard_and_capture_imds() {
     printf 'cpu_count=%s\n' "$(nproc)"
     grep MemTotal /proc/meminfo
     printf 'boot_time_local=%s\n' "$(uptime -s 2>/dev/null || printf unavailable)"
-    printf 'boot_timestamp_utc=%s\n' "$(date -u -d "@$(awk '{print int($1)}' /proc/uptime)" +%FT%TZ 2>/dev/null || printf unavailable)"
+    # F2: /proc/uptime is elapsed seconds, not an epoch. Use /proc/stat btime.
+    boot_epoch=$(awk '$1 == "btime" {print $2}' /proc/stat)
+    if [[ "$boot_epoch" =~ ^[0-9]+$ ]]; then
+      boot_utc=$(date -u -d "@$boot_epoch" +%FT%TZ) || boot_utc='unavailable'
+    else
+      boot_utc='unavailable'
+    fi
+    printf 'boot_timestamp_utc=%s\n' "$boot_utc"
   } > "$EVIDENCE/host-facts.txt"
 
   {
@@ -230,7 +307,7 @@ guard_and_capture_imds() {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Alibaba host bootstrap. Docker is the only host prerequisite installed
+# 6. Alibaba host bootstrap. Docker is the only host prerequisite installed
 #    here; the pinned uv/Python/Node runtimes and PostgreSQL 18 are installed by
 #    the common core. No docker-group mutation, no socket chmod, no relogin.
 # ---------------------------------------------------------------------------
@@ -257,9 +334,10 @@ bootstrap_host() {
 # Run
 # ---------------------------------------------------------------------------
 guard_no_circleci
+guard_evidence_path
 guard_proof_sha
 case "$HOST_STATE" in
-  "$PROOF_ROOT"/*) die 'Host state directory must be outside the git worktree' ;;
+  "$PROOF_ROOT"|"$PROOF_ROOT"/*) die 'Host state directory must be outside the git worktree' ;;
 esac
 mkdir -p "$EVIDENCE"
 guard_run_authorization
