@@ -1,13 +1,20 @@
 # LinguaGraph M6 external proof preparation
 
 This independent repository contains proof infrastructure only. It is scoped to
-M6-EXI-01 / M6-EXI-02 and the exact LinguaGraph candidate SHA/tree in
-`.circleci/config.yml`. It does not alter the LinguaGraph repository.
+the M6 external-infrastructure checkpoints and the exact LinguaGraph candidate
+SHA/tree frozen below. It does not alter the LinguaGraph repository.
+
+Two provider paths exist and must not be conflated:
+
+```text
+M6-EXI-01 / M6-EXI-02   CircleCI hosted path (historical / pre-step)
+M6-EXI-03               Alibaba ECS alternate hosted path
+```
 
 ## Candidate binding (current)
 
-This proof preparation is bound to the final M6 product candidate that has
-passed Human Static Diff Review and Human Runtime Acceptance:
+This proof repository binds the selected M6 product candidate for hosted
+verification:
 
 ```text
 product repository: Pacchifans69/LinguaGraph
@@ -19,49 +26,58 @@ frozen main:        cb61725fe9f05c704a6f80b67c6343f49ade9234
 Alembic head:       0006
 ```
 
+These pins are identical in the CircleCI adapter, the Alibaba ECS adapter and
+the provider-neutral semantic core. They are not weakened by this repair.
+
 Historical provenance only — an earlier binding was candidate
 `40f7fc98bed0a0261ef67451077b04dbbd1281b3`, tree
 `32e2a5cd0d7e84c6eaf4e9400568026ae2fdbe3e`, parent
 `c9ce3732e546900a068b1e8b4cbb0764e311ed4b`. It is **not** an active binding
 anywhere in this repository.
 
+## Harness architecture
+
+```text
+scripts/run-m6-proof-core.sh              provider-neutral semantic core
+scripts/run-m6-proof.sh                   CircleCI thin adapter (EXI-01 / EXI-02)
+scripts/run-m6-proof-alibaba-ecs.sh       Alibaba ECS thin adapter (EXI-03)
+.circleci/config.yml                      historical CircleCI configuration
+```
+
+The semantic core owns every Gate 2 requirement: candidate remote refs, exact
+detached candidate checkout, tree, unique parent, frozen-main ancestry, candidate
+configuration exclusion, runtime pins, migration integrity, the full backend and
+frontend suites, Playwright, dependency integrity, cleanup, `outcome.txt` and
+`artifact-manifest.sha256`. It performs **no** provider identity check.
+
+The CircleCI adapter retains the historical EXI-01 authorization namespace
+`^M6-EXI-01-RUN-[A-Za-z0-9_-]+$`. It is deliberately **not** converted to the
+EXI-03 namespace. The Alibaba ECS adapter requires a distinct one-shot EXI-03
+authorization.
+
+The historical `.circleci/config.yml` remains byte-identical and is not modified
+by this repair.
+
 ## Authorization state
 
-**HOLD — R2 execution is NOT authorized.** `run_proof` defaults to `false`, and
-the workflow selects only proof `main` when the parameter is explicitly `true`.
-
-All three run identifiers are consumed and must never be reused:
+**M6-EXI-03 hosted execution is NOT authorized by this repair.**
 
 ```text
-M6-EXI-01-RUN-U:            SPENT / MUST NOT REUSE
-M6-EXI-01-RUN-R0-4FB193A:   SPENT / MUST NOT REUSE
-M6-EXI-01-RUN-R1-848E19C:   SPENT / MUST NOT REUSE
+EXI-03 hosted execution:        NOT AUTHORIZED
+semantic hosted proof:          ABSENT
+G2-X01:                         OPEN / EXTERNAL
+Gate 2:                         NOT PASS
+PR / merge:                     NOT AUTHORIZED
 ```
 
-After the M6-EXI-02 guard retirement the project-level guard variables are
-absent again:
+Writing the EXI-03 adapter does not run it, does not reserve an execution slot,
+and does not produce proof. No semantic hosted proof exists until a separately
+authorized run completes and its artifacts are independently verified.
 
-```text
-APPROVED_PROOF_SHA:          ABSENT
-M6_PROOF_RUN_AUTHORIZATION:  ABSENT
-```
+## M6-EXI-01 / M6-EXI-02 — CircleCI historical / pre-step path
 
-Any future R2 execution requires BOTH:
-
-1. a new, Human-reviewed proof SHA, and
-2. a new, distinct, one-shot Human run authorization.
-
-Before a separately approved execution, CircleCI's project configuration must
-provide `APPROVED_PROOF_SHA` set to the exact Human-reviewed proof commit and
-`M6_PROOF_RUN_AUTHORIZATION` set to a distinct Human approval identifier in
-the form `M6-EXI-01-RUN-<identifier>`. Those values are deliberately absent
-here; without them the job fails closed. Do not embed API tokens or passwords
-in the project repository.
-
-## Hosted attempt history (factual)
-
-Three hosted attempts have been made against this proof setup. Every one of them
-was rejected by the scheduler **before any repository-defined step ran**.
+Every hosted attempt on this path so far was rejected by the scheduler **before
+any repository-defined step ran**. No semantic proof was obtained on this path.
 
 Pipeline #2 — proof SHA `d668429b6411170fdd1becbc838cf8e31d51f390`:
 
@@ -84,14 +100,6 @@ message:        Job was rejected because resource class large.gen2,
                 image ubuntu-2404:2026.05.1 is not a valid resource class
 ```
 
-R0 terminal facts:
-
-- the executor did not start (`start_time = null`);
-- the repository-defined checkout did not run;
-- `scripts/run-m6-proof.sh` did not run;
-- no proof artifacts existed (the job artifact endpoint returned 404);
-- **semantic hosted proof was not obtained**.
-
 R1 / pipeline #4 — proof SHA `848e19cc83eae4e7a347b4a8abf8a5dff502b679`;
 executor tuple `ubuntu-2404:2025.09.1` + `large.gen2`:
 
@@ -106,12 +114,28 @@ message:        Job was rejected because resource class large.gen2,
                 image ubuntu-2404:2025.09.1 is not a valid resource class
 ```
 
-R1 terminal facts: the executor did not start (`start_time = null`); the
-repository-defined checkout did not run; `scripts/run-m6-proof.sh` did not run;
-no proof artifacts existed (the job artifact endpoint returned 404);
-**semantic hosted proof was absent**.
+R0, R1 and pipeline #2 terminal facts: the executor did not start
+(`start_time = null`); the repository-defined checkout did not run;
+`scripts/run-m6-proof.sh` did not run; no proof artifacts existed (the job
+artifact endpoint returned 404).
 
-## Interpretation discipline
+R2 preparation was a single-variable resource-generation experiment
+(`large.gen2` -> `large.gen3`). It has not produced semantic proof.
+
+The historical EXI-01 run identifiers below are consumed and must never be
+reused:
+
+```text
+M6-EXI-01-RUN-U:            SPENT / MUST NOT REUSE
+M6-EXI-01-RUN-R0-4FB193A:   SPENT / MUST NOT REUSE
+M6-EXI-01-RUN-R1-848E19C:   SPENT / MUST NOT REUSE
+```
+
+The EXI-01/EXI-02 manifest excludes only
+`.circleci/config.yml` semantics changes: CircleCI provenance, workflow
+identity and job identity are still validated by the CircleCI adapter.
+
+### CircleCI interpretation discipline
 
 R0 and R1 reproduced the same pre-step `invalid-resource-class` class of failure
 while changing only the Ubuntu 24.04 image tag. This materially weakens the
@@ -122,19 +146,18 @@ bug, an account defect, a Free-plan defect, a `large.gen2` entitlement defect, a
 scheduler routing bug, an image-registry defect, or a backend defect. Those
 remain hypotheses only.
 
-For project setup, leave all VCS push, PR, schedule, and custom webhook
-triggers disabled at the CircleCI project level. A skipped workflow is not a
-substitute for verifying project-level triggers are disabled. Human must review
-the exact proof commit/tree first.
+For project setup, leave all VCS push, PR, schedule, and custom webhook triggers
+disabled at the CircleCI project level. A skipped workflow is not a substitute
+for verifying project-level triggers are disabled.
 
-## M6-EXI-02 — Human-approved M6-specific External Infrastructure Exception
+## M6-EXI-03 — Alibaba ECS alternate hosted path
 
-`M6-EXI-02` is a **new M6-specific External Infrastructure Exception**. Its sole
-purpose is to attempt a **controlled CircleCI Gen3 hosted-proof path** in
-response to the pre-step `invalid-resource-class` blocker already reproduced by
-R0 and R1, staying inside the same CircleCI provider.
+The EXI-03 adapter is the alternate hosted-proof path on a measured Alibaba
+Cloud ECS instance. It binds the same frozen Product candidate and the same
+semantic core as the CircleCI path. It exists because the CircleCI path has
+never reached a repository-defined step.
 
-The exception **does NOT waive** any Gate 2 requirement, including:
+The EXI-03 adapter does **not** waive any Gate 2 requirement, including:
 
 ```text
 exact candidate / tree / base provenance
@@ -156,68 +179,224 @@ tracked-tree integrity
 artifact integrity and independent artifact review
 ```
 
-## R2 hypothesis and single-variable change
+### Measured EXI-03 infrastructure provenance
 
-R2 preparation is a **single-variable resource-generation experiment**:
-
-```text
-R1 (observed):   image = ubuntu-2404:2025.09.1   resource = large.gen2
-R2 (prepared):   image = ubuntu-2404:2025.09.1   resource = large.gen3
-```
-
-The only intended execution-semantic variable is the resource generation,
-Gen2 -> Gen3. The CPU/RAM envelope is intended to remain the same:
+Observed before this repair, and recorded here as measurement (not as pinned
+execution identity):
 
 ```text
-4 vCPU
-16 GiB
+instance:     i-j6c13vpnkuq6xbbhyxzw
+region:       cn-hongkong
+zone:         cn-hongkong-d
+type:         ecs.g9i.xlarge
+image:        ubuntu_24_04_x64_20G_alibase_20260828.vhd
+
+OS observed:  Ubuntu 24.04.4 LTS
+architecture: x86_64
+CPU:          4
+memory:       15952376 kB observed MemTotal
+
+system disk:  d-j6c13vpnkuq6xbbjtrb7
+              60 GiB
+              cloud_essd
+              PL0
+              DeleteWithInstance=true
+
+snapshots:    0
+RAM role:     none
+
+effective IMDS:
+              tokenless HTTP 403
+              token mode available
+
+security group:
+              sg-j6c13vpnkuq6xbbg9p2z
 ```
 
-Public CircleCI documentation currently classifies `large.gen3` as a Cloud
-resource class with 4 vCPU / 16 GiB and marks Gen3 as **Open Beta**.
+Clean-ECS baseline measurement:
 
-> Public CircleCI documentation lists `large.gen3` as a Cloud Gen3 resource
-> class. This documentation-level availability does not prove that this
-> specific project can provision it; R2 has not run.
+```text
+Docker ABSENT
+Node ABSENT
+npm ABSENT
+uv ABSENT
+psql ABSENT
+system Python 3.12.3
+sudo -n available
+```
 
-Everything else is deliberately held constant: the machine image
-(`ubuntu-2404:2025.09.1`), all product pins, all runtime pins, the test surface,
-the workflow semantics, and `scripts/run-m6-proof.sh` (byte-identical to R1).
+### Ingress (factual)
 
-This proof does not enable `docker_layer_caching`, so no configuration or script
-change is made in response to any Gen3 DLC known issue.
+```text
+TCP/22 <- 106.47.210.98/32
+TCP/22 <- 100.104.0.0/16
+no other observed ingress rules
+```
 
-This repository change does not trigger, request or authorize any run.
-Availability is not verified by running a pipeline here; that belongs to a
-separately authorized R2 execution.
+The public IP is a runtime-assigned observation, **not** immutable execution
+identity. The ECS adapter records public IP, kernel patch version, boot
+timestamp and runtime-assigned network observations, but does not hard-fail
+solely because they change.
+
+### EXI-03 provenance guard
+
+The adapter uses Alibaba ECS IMDS at `http://100.100.100.200/latest` and
+requires all of the following exactly:
+
+```text
+tokenless instance-id request HTTP status = 403
+token-mode request = successful
+
+instance-id:    i-j6c13vpnkuq6xbbhyxzw
+region-id:      cn-hongkong
+zone-id:        cn-hongkong-d
+instance-type:  ecs.g9i.xlarge
+image-id:       ubuntu_24_04_x64_20G_alibase_20260828.vhd
+```
+
+It also captures instance-id, instance-name, hostname, region, zone, instance
+type, image ID, serial number, VPC, vSwitch, private IPv4, effective public /
+EIPv4 when available, primary MAC, primary ENI, OS release, `uname`,
+architecture, CPU count, MemTotal, boot time, the instance identity document,
+the instance identity PKCS#7 response, and the SHA-256 of both identity objects
+into `proof-artifacts/`.
+
+No repository-pinned Alibaba certificate is required by this repair.
+
+### EXI-03 CircleCI anti-spoof guard
+
+The adapter fails if **any** of the following is nonempty:
+
+```text
+CIRCLE_PROJECT_USERNAME
+CIRCLE_PROJECT_REPONAME
+CIRCLE_BRANCH
+CIRCLE_SHA1
+CIRCLE_WORKFLOW_ID
+CIRCLE_BUILD_NUM
+```
+
+Alibaba execution must never be obtained by spoofing CircleCI identity.
+
+### EXI-03 host bootstrap (defined, not executed)
+
+The adapter defines the future formal-run bootstrap. When Docker is absent it:
+
+1. runs `sudo -n env DEBIAN_FRONTEND=noninteractive apt-get update`;
+2. installs only the minimum host prerequisite required to make Docker usable
+   (`docker.io`, `--no-install-recommends`);
+3. starts Docker without enabling unnecessary persistent services;
+4. records the installed package version and `docker --version`.
+
+It does **not** add the ECS user to the `docker` group, does **not** `chmod` the
+Docker socket, and does **not** require logout/relogin. The core works through
+either directly usable `docker` or passwordless `sudo -n docker`. The pinned
+uv/Python/Node runtimes and PostgreSQL 18 are installed by the core, not by the
+host bootstrap.
+
+## Future EXI-03 run requirements
+
+A future EXI-03 run requires **both**:
+
+1. `APPROVED_PROOF_SHA` set to the exact full 40-character proof commit that a
+   Human has reviewed; and
+2. a new, distinct, one-shot Human run authorization of the form
+
+   ```text
+   M6-EXI-03-RUN-<approved-proof-sha-prefix>-<nonce>
+   ```
+
+The authorization prefix must match the leading characters of
+`APPROVED_PROOF_SHA`. Do not embed an actual Human authorization token, API
+token, or password in this repository.
+
+The repaired proof SHA created by the M6-EXI-03 harness repair is **not** yet
+Human-reviewed. It requires separate Human review before any EXI-03 run
+authorization. The adapter deliberately does not hardcode the not-yet-known
+repaired proof SHA.
+
+### Run token spent semantics
+
+```text
+PASS                                    => SPENT
+test FAIL                               => SPENT
+bootstrap FAIL                          => SPENT
+provider/runtime FAIL after invocation  => SPENT
+cleanup FAIL                            => SPENT
+```
+
+Once a syntactically valid authorized invocation begins, the adapter marks the
+authorization token spent in a host-persistent, untracked marker directory
+outside the git worktree:
+
+```text
+$HOME/.local/state/linguagraph-m6-proof/spent/
+```
+
+The marker is created **before** provider, bootstrap and semantic execution. A
+reused token fails closed. A rerun requires a fresh Human authorization. This
+mechanism is defense-in-depth; the Human procedural semantics above remain
+binding regardless of the marker.
+
+The raw authorization token is never written to evidence. Only its SHA-256 is
+recorded.
+
+## Artifact handling and retrieval
+
+The Alibaba ECS adapter preserves artifacts on both PASS and FAIL:
+
+1. it writes `proof-artifacts/outcome.txt` and a full
+   `proof-artifacts/artifact-manifest.sha256`;
+2. it builds a deterministic archive of `proof-artifacts/`;
+3. it stores the archive's SHA-256 outside the archive, under
+   `$HOME/.local/state/linguagraph-m6-proof/artifacts/`;
+4. it exits with the proof's failure status preserved.
+
+It does **not** upload artifacts to another provider automatically. Human
+retrieval happens separately via SCP after a future authorized run.
+
+An independent reviewer must download every artifact and run
+`sha256sum -c artifact-manifest.sha256` in the downloaded artifact directory.
+The manifest excludes itself; record its own SHA-256 outside the archive. A
+proof exit 0 without accessible, independently verified artifacts is
+insufficient evidence for Human Gate 2 review.
+
+The instance should **not** be released until artifacts have been retrieved and
+independently verified.
 
 ## What the proof verifies
 
-The script checks exact app remote refs, detached checkout SHA/tree/unique
-parent/ancestor, and reviewed proof SHA before installing any runtime. It
+The core checks exact app remote refs, detached checkout SHA/tree/unique
+parent/ancestor, and the approved proof SHA before installing any runtime. It
 records Python 3.13, Node 24, PostgreSQL 18 and the container digest; runs
-frozen backend dependencies, empty database to Alembic 0006/current/check,
-the complete 587 backend tests with zero skips, frozen frontend
-dependencies, lint, typecheck, all 502 Vitest tests and build, Chromium
-installation and all seven real-API/disposable-DB Playwright specs with
-26 passed and no retry. Finally, it checks four dependency hashes against
-pre-run and committed blobs, exact tracked tree, zero residual disposable
-databases, and unchanged remote refs. Any stage failure leaves the job failed
-and attempts container cleanup.
+frozen backend dependencies, empty database to Alembic `0006`/current/check, the
+complete 587 backend tests with zero skips, frozen frontend dependencies, lint,
+typecheck, all 502 Vitest tests and build, Chromium installation and all seven
+real-API/disposable-DB Playwright specs with 26 passed and no retry. Finally it
+checks four dependency hashes against pre-run and committed blobs, the exact
+tracked tree, zero residual disposable databases, and unchanged remote refs.
+Any stage failure leaves the job failed and attempts container cleanup. Cleanup
+failure fails the run closed.
 
-All evidence, including failed stage logs, belongs to `proof-artifacts/` in the
-CircleCI job. An independent reviewer must download every file and run
-`sha256sum -c artifact-manifest.sha256` in the downloaded artifact directory.
-The manifest excludes itself; record its own SHA-256 outside CircleCI. A proof
-job exit 0 without accessible, independently verified artifacts is insufficient
-evidence for Human Gate 2 review. M5 proof and local M6 tests never substitute
-for this exact candidate's hosted execution.
+Seven exact Playwright specs:
 
-Before a separate run authorization, independently confirm the **actual**
-project configuration instead of treating a documentation-level default as
-fact: the credit balance, `large.gen3` provisioning entitlement for this
-project, exact availability of the pinned image (`ubuntu-2404:2025.09.1`), and
-effective artifact retention. Capture the observed values in the Human review
-record. The project exists and pipelines #2, #3 and #4 are on record, but its
-effective settings, entitlements, image availability and retention still must
-be observed and recorded before any run authorization.
+```text
+e2e/golden-path.spec.ts
+e2e/unicode.spec.ts
+e2e/segmentation.spec.ts
+e2e/token-segmentation.spec.ts
+e2e/lemma-annotation.spec.ts
+e2e/pos-annotation.spec.ts
+e2e/workbench-information-architecture.spec.ts
+```
+
+## Human review boundary
+
+The proof repository binds the selected candidate for hosted verification.
+Human review/acceptance provenance is external to this repository and is not
+established merely by this README.
+
+This README does not record, prove, or imply any Human HSDR/HRA verdict. A
+future proof SHA created by this repair still requires separate Human review,
+and Gate 2 remains NOT PASS until a separately authorized hosted run produces
+retained, independently verified evidence and a Human accepts it.
